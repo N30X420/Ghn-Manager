@@ -1,0 +1,8 @@
+# Production
+builds/
+out/
+
+# Misc
+.vscode
+package.psd1
+config.json
