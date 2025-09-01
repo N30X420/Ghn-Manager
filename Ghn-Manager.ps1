@@ -11,7 +11,7 @@ param (
 $ErrorActionPreference = "Stop"
 
 # Define program metadata
-$version = "1.1"
+$version = "1.2"
 $ProgramName = "G.hn-Manager"
 $programdir = "C:\MATRIXNET\$ProgramName-$version"
 $GithubRepo = "https://github.com/N30X420/Ghn-Manager"
@@ -271,16 +271,242 @@ function ShowConnectedGhnEndpoints {
     CheckConnection
     Clear-SSHStream $stream
     Write-Log "Fetching connected G.hn endpoints..." "INFO"
-    Write-Host "`nFetching connected G.hn endpoints..." -ForegroundColor Yellow
+    Write-Host "`nFetching connected G.hn endpoints" -ForegroundColor Yellow
     $stream.WriteLine("show ghn interface")
-    Start-Sleep -Seconds 2
+    $count = 0
+    while ($count -ne 4) {
+        Write-Host "." -ForegroundColor Yellow -NoNewline
+        Start-Sleep -Seconds 1
+        $count++
+    }
     $output = $stream.Read()
     Write-Log "Connected G.hn endpoints: $output" "INFO"
-    Write-Host "-----------Connected G.hn endpoints-----------" -ForegroundColor Cyan
-    Write-Output $output
-    Write-Host "--------------------------------------------" -ForegroundColor Cyan
+
+    # Parse the G.hn endpoint data into a structured format
+    $endpoints = @()
+    foreach ($line in $output -split "`r?`n") {
+        $line = $line.Trim()
+        if ($line -match "^(?<Interface>\S+)\s+(?<Master_ID>\d+)\s+(?<Link>\S+)\s+(?<Local_MAC>\S+)\s+(?<Remote_MAC>\S+)\s+(?<Speed>\S+)\s+(?<Wire_Length>\S+)\s+(?<Estimated_XPUT>\S+)$") {
+            $endpoints += [PSCustomObject]@{
+                Interface       = $matches.Interface
+                Master_ID       = $matches.Master_ID
+                Link            = $matches.Link
+                Local_MAC       = $matches.Local_MAC
+                Remote_MAC      = $matches.Remote_MAC
+                Speed           = $matches.Speed
+                Wire_Length     = $matches.Wire_Length
+                Estimated_XPUT  = $matches.Estimated_XPUT
+            }
+        }
+    }
+
+    # Display the parsed G.hn endpoint data in a table format
+    Write-Host "`n----------- Connected G.hn Endpoints -----------" -ForegroundColor Cyan
+    $endpoints | Format-Table -AutoSize
+    Write-Host "------------------------------------------------" -ForegroundColor Cyan
+
     Write-Host "Press any key to continue..." -ForegroundColor Yellow
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+}
+
+# Function to display configured VLANs
+function ShowConfiguredVlans {
+    Logo
+    CheckConnection
+    Clear-SSHStream $stream
+    Write-Log "Fetching VLAN configuration..." "INFO"
+    Write-Host "`nFetching VLAN configuration" -ForegroundColor Yellow
+    $stream.WriteLine("show vlan all")
+    $count = 0
+    while ($count -ne 4) {
+        Write-Host "." -ForegroundColor Yellow -NoNewline
+        Start-Sleep -Seconds 1
+        $count++
+    }
+    $output = $stream.Read()
+    Write-Log "VLAN configuration: $output" "INFO"
+
+    # Parse the VLAN configuration into a structured format
+    $vlans = @()
+    $currentVlan = $null
+    foreach ($line in $output -split "`r?`n") {
+        $line = $line.Trim()
+        if ($line -match "^VLAN ID: (\d+)$") {
+            # Start a new VLAN entry
+            if ($currentVlan) {
+                $vlans += $currentVlan
+            }
+            $currentVlan = @{
+                VlanId = $matches[1]
+                VlanType = ""
+                Description = ""
+                TagPorts = @()
+                unTagPorts = @()
+                ForbiddenPorts = @()
+            }
+        } elseif ($line -match "^VLAN Type:\s*(.*)$") {
+            $currentVlan.VlanType = $matches[1]
+        } elseif ($line -match "^Description:(.*)$") {
+            $currentVlan.Description = $matches[1].Trim()
+        } elseif ($line -match "^Tag Ports:$") {
+            $currentSection = "TagPorts"
+        } elseif ($line -match "^unTag Ports:$") {
+            $currentSection = "unTagPorts"
+        } elseif ($line -match "^Forbidden Ports:$") {
+            $currentSection = "ForbiddenPorts"
+        } elseif ($line -match "^\S") {
+            # Add ports to the current section
+            if ($currentSection -and $currentVlan) {
+                $currentVlan.$currentSection += $line -split "\s{2,}"
+            }
+        }
+    }
+    # Add the last VLAN entry
+    if ($currentVlan) {
+        $vlans += $currentVlan
+    }
+
+    # Display the parsed VLAN configuration in a table format
+    Write-Host "`n----------- VLAN Configuration -----------" -ForegroundColor Cyan
+    $table = $vlans | ForEach-Object {
+        [PSCustomObject]@{
+            "VLAN ID"         = $_.VlanId
+            "Type"            = $_.VlanType
+            "Description"     = $_.Description
+            "Tagged Ports"    = ($_.TagPorts -join ", ")
+            "Untagged Ports"  = ($_.unTagPorts -join ", ")
+            "Forbidden Ports" = ($_.ForbiddenPorts -join ", ")
+        }
+    }
+    $table | Format-Table -AutoSize
+    Write-Host "------------------------------------------" -ForegroundColor Cyan
+
+    Write-Host "Press any key to continue..." -ForegroundColor Yellow
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+}
+
+# Function to add a new VLAN
+function AddVlan {
+    Logo
+    CheckConnection
+    Clear-SSHStream $stream
+    Write-Log "Adding new VLAN..." "INFO"
+    Write-Host "`nAdding new VLAN" -ForegroundColor Yellow
+    Write-Warning "BE SURE TO NOT USE AN EXISTING VLAN ID, THIS WILL OVERWRITE THE EXISTING VLAN!"
+
+    # Validate VLAN ID
+    while ($true) {
+        $vlanId = Read-Host "Enter VLAN ID (1-4094)"
+        if ($vlanId -match '^\d+$' -and [int]$vlanId -ge 1 -and [int]$vlanId -le 4094) {
+            break
+        } else {
+            Write-Host "Invalid VLAN ID. Please enter a number between 1 and 4094." -ForegroundColor Red
+        }
+    }
+
+    $vlanDescription = Read-Host "Enter VLAN Name/Description"
+    Write-Host "`nWould you like to use custom port assignments? (Y/N)" -ForegroundColor Yellow
+    Write-Host "If no the default ports will be assigned. (Ghn1,Ghn2,Ghn3,Ghn4,RJ45/G1,RJ45/G2,Fiber/G1,Fiber/G2)" -ForegroundColor Yellow
+    $customPorts = Read-Host "Use custom ports"
+    if ($customPorts -eq "Y" -or $customPorts -eq "y") {
+        $taggedPorts = Read-Host "Enter Tagged Ports (comma-separated, e.g., Ghn1,Ghn2,Ghn3,Ghn4,Ghn5,Ghn6,Ghn7,Ghn8,Monitor,RJ45/G1,RJ45/G2,Fiber/G1,Fiber/G2)"
+        $untaggedPorts = Read-Host "Enter Untagged Ports (comma-separated, e.g., Ghn1,Ghn2,Ghn3,Ghn4,Ghn5,Ghn6,Ghn7,Ghn8,Monitor,RJ45/G1,RJ45/G2,Fiber/G1,Fiber/G2)"
+        $forbiddenPorts = Read-Host "Enter Forbidden Ports (comma-separated, e.g., Ghn1,Ghn2,Ghn3,Ghn4,Ghn5,Ghn6,Ghn7,Ghn8,Monitor,RJ45/G1,RJ45/G2,Fiber/G1,Fiber/G2)"
+    }
+    else {
+        $taggedPorts = "Ghn1,Ghn2,Ghn3,Ghn4,RJ45/G1,RJ45/G2,Fiber/G1,Fiber/G2"
+        $untaggedPorts = ""
+        $forbiddenPorts = ""
+    }
+    Write-Log "Creating VLAN ID: $vlanId, Description: $vlanDescription" "INFO"
+    $stream.WriteLine("configure terminal")
+    Start-Sleep -Seconds 2
+    $stream.WriteLine("vlan $vlanId")
+    Start-Sleep -Seconds 2
+    $stream.WriteLine("name `"$vlanDescription`"")
+    Start-Sleep -Seconds 2
+    if ($taggedPorts) {
+        $taggedPortsArray = $taggedPorts -split ","
+        foreach ($port in $taggedPortsArray) {
+            $port = $port.Trim()
+            if ($port) {
+                Write-Log "Adding Tagged Port: $port to VLAN ID: $vlanId" "INFO"
+                Write-Host "Adding Tagged Port: $port to VLAN ID: $vlanId" -ForegroundColor Yellow
+                $stream.WriteLine("switchport tagged ethernet $port")
+                Start-Sleep -Seconds 1
+            }
+        }
+    }
+    if ($untaggedPorts) {
+        $untaggedPortsArray = $untaggedPorts -split ","
+        foreach ($port in $untaggedPortsArray) {
+            $port = $port.Trim()
+            if ($port) {
+                Write-Log "Adding Untagged Port: $port to VLAN ID: $vlanId" "INFO"
+                Write-Host "Adding Untagged Port: $port to VLAN ID: $vlanId" -ForegroundColor Yellow
+                $stream.WriteLine("switchport untagged ethernet $port")
+                Start-Sleep -Seconds 1
+            }
+        }
+    }
+    if ($forbiddenPorts) {
+        $forbiddenPortsArray = $forbiddenPorts -split ","
+        foreach ($port in $forbiddenPortsArray) {
+            $port = $port.Trim()
+            if ($port) {
+                Write-Log "Adding Forbidden Port: $port to VLAN ID: $vlanId" "INFO"
+                Write-Host "Adding Forbidden Port: $port to VLAN ID: $vlanId" -ForegroundColor Yellow
+                $stream.WriteLine("switchport forbidden ethernet $port")
+                Start-Sleep -Seconds 1
+            }
+        }
+    }
+    $stream.WriteLine("exit")
+    Start-Sleep -Seconds 1
+    Write-Log "VLAN ID: $vlanId created successfully." "INFO"
+    Write-Host "VLAN ID: $vlanId created successfully." -ForegroundColor Green
+
+
+}
+
+# Function to remove an existing VLAN
+function RemoveVlan {
+    Logo
+    CheckConnection
+    Clear-SSHStream $stream
+    Write-Log "Removing VLAN..." "INFO"
+    Write-Host "`nRemoving VLAN" -ForegroundColor Yellow
+    Write-Warning "BE SURE TO NOT REMOVE AN EXISTING VLAN THAT IS IN USE, THIS WILL DISCONNECT DEVICES!"
+
+    # Validate VLAN ID
+    while ($true) {
+        $vlanId = Read-Host "Enter VLAN ID to remove (1-4094)"
+        if ($vlanId -match '^\d+$' -and [int]$vlanId -ge 1 -and [int]$vlanId -le 4094) {
+            break
+        } else {
+            Write-Host "Invalid VLAN ID. Please enter a number between 1 and 4094." -ForegroundColor Red
+        }
+    }
+
+    Write-Host "`nAre you sure you want to remove VLAN ID: $vlanId? (Y/N)" -ForegroundColor Yellow
+    $confirmation = Read-Host "Type 'Y' to confirm"
+    if ($confirmation -ne 'Y' -or $confirmation -ne 'y') {
+        Write-Log "Remove VLAN cancelled by user." "INFO"
+        Write-Host "Operation cancelled." -ForegroundColor Red
+        start-sleep -Seconds 1
+        return
+    }
+
+    Write-Log "Removing VLAN ID: $vlanId" "INFO"
+    Write-Host "Removing VLAN ID: $vlanId" -ForegroundColor Yellow
+    $stream.WriteLine("configure terminal")
+    Start-Sleep -Seconds 2
+    $stream.WriteLine("no vlan $vlanId")
+    Start-Sleep -Seconds 2
+    $stream.WriteLine("exit")
+    Start-Sleep -Seconds 1
+    Write-Log "VLAN ID: $vlanId removed successfully." "INFO"
+    Write-Host "VLAN ID: $vlanId removed successfully." -ForegroundColor Green
 }
 
 # Function to restart a specific G.hn endpoint by MAC address
@@ -352,7 +578,7 @@ function RestartG42004C {
 
     # Automatically confirm if -RestartG42004C is used
     if (-not $RestartG42004C) {
-        Write-Warning "Are you sure you want to restart the G4200-4C? (Y/N)"
+        Write-Warning "Are you sure you want to restart the G4200-4C? (Config will not be saved !) (Y/N)"
         Write-Warning "This will disconnect all G.hn clients and disrupt the network."
         $confirmation = Read-Host "Type 'Y' to confirm"
         if ($confirmation -ne 'Y') {
@@ -372,7 +598,7 @@ function RestartG42004C {
     Start-Sleep -Seconds 2
     $stream.WriteLine("reboot")
     Start-Sleep -Seconds 2
-    $stream.WriteLine("y")
+    $stream.WriteLine("n")
     Start-Sleep -Seconds 5
     Write-Log "Restart command executed for G4200-4C." "INFO"
     Write-Host "Command executed successfully." -ForegroundColor Green
@@ -385,6 +611,55 @@ function RestartG42004C {
     Write-Log "G4200-4C is back online." "INFO"
     Write-Host "G4200-4C is back online." -ForegroundColor Green
     Write-Host "`nYou can now reconnect to the device." -ForegroundColor Yellow
+    Write-Host "Press any key to continue..." -ForegroundColor Yellow
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+}
+
+# Function to show system logs from the G4200-4C device
+function ShowSystemLogs {
+    Logo
+    CheckConnection
+    Clear-SSHStream $stream
+    Write-Log "Fetching system logs..." "INFO"
+    Write-Host "`nFetching system logs" -ForegroundColor Yellow
+    $stream.WriteLine("show logging")
+    $count = 0
+    while ($count -ne 4) {
+        Write-Host "." -ForegroundColor Yellow -NoNewline
+        Start-Sleep -Seconds 1
+        $count++
+    }
+    $output = $stream.Read()
+    Write-Log "System logs: $output" "INFO"
+
+    # Display the system logs
+    Write-Host "`n----------- System Logs -----------" -ForegroundColor Cyan
+    Write-Host $output
+    Write-Host "-----------------------------------" -ForegroundColor Cyan
+
+    Write-Host "Press any key to continue..." -ForegroundColor Yellow
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    
+}
+
+function SaveConfig {
+    Logo
+    CheckConnection
+    Clear-SSHStream $stream
+    Write-Log "Saving configuration..." "INFO"
+    Write-Host "`nSaving configuration" -ForegroundColor Yellow
+    $stream.WriteLine("write")
+    start-sleep -Seconds 1
+    $stream.WriteLine("y")
+    $count = 0
+    while ($count -ne 4) {
+        Write-Host "." -ForegroundColor Yellow -NoNewline
+        Start-Sleep -Seconds 1
+        $count++
+    }
+    $output = $stream.Read()
+    Write-Log "Save configuration response: $output" "INFO"
+    Write-Host "`nConfiguration saved successfully." -ForegroundColor Green
     Write-Host "Press any key to continue..." -ForegroundColor Yellow
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 }
@@ -435,6 +710,7 @@ Write-Host "| Always trust the process |" -ForegroundColor Magenta
 Write-Host "----------------------------" -ForegroundColor Magenta
 Start-Sleep -Seconds 3
 CheckForUpdates
+CheckDependencies
 
 # Ensure the program directory exists
 if (-Not (Test-Path $programdir)) { New-Item -ItemType Directory -Path $programdir }
@@ -480,7 +756,7 @@ while ($WhileLoopVar -eq 1){
 ##################################
 
 # Define menu items
-$list = @('CHECK DEPENDENCIES', 'CONNECT / DISCONNECT G4200-4C', 'OPEN SHELL', 'SHOW CONNECTED GHN ENDPOINTS', 'RESTART GHN ENDPOINT', 'RESTART G4200-4C', 'EXIT')
+$list = @('CONNECT / DISCONNECT G4200-4C', 'SHOW CONNECTED GHN ENDPOINTS', 'SHOW CONFIGURED VLANS', 'ADD VLAN', 'REMOVE VLAN', 'RESTART GHN ENDPOINT', 'RESTART G4200-4C', 'OPEN SHELL', 'SHOW SYSTEM LOGS', 'SAVE CONFIG', 'EXIT')
 
 
 # menu offset to allow space to write a message above the menu
@@ -566,12 +842,16 @@ while ($menu_active) {
 
 Clear-Host
 switch ($selection) {
-    "CHECK DEPENDENCIES" {CheckDependencies}
     "CONNECT / DISCONNECT G4200-4C" {ConnectToGhnDevice}
-    "OPEN SHELL" {OpenShell}
     "SHOW CONNECTED GHN ENDPOINTS" {ShowConnectedGhnEndpoints}
+    "SHOW CONFIGURED VLANS" {ShowConfiguredVlans}
+    "ADD VLAN" {AddVlan}
+    "REMOVE VLAN" {RemoveVlan}
     "RESTART GHN ENDPOINT" {RestartGhnEndpoint}
     "RESTART G4200-4C" {RestartG42004C}
+    "OPEN SHELL" {OpenShell}
+    "SHOW SYSTEM LOGS" {ShowSystemLogs}
+    "SAVE CONFIG" {SaveConfig}
     "EXIT" {CloseProgram}
 }
 }

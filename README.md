@@ -1,26 +1,56 @@
 # G.hn-Manager
 
-G.hn-Manager is a PowerShell-based tool designed to manage and interact with G.hn devices, such as the G4200-4C. It provides an interactive menu for managing connections, restarting endpoints, and performing other administrative tasks. The tool also supports non-interactive execution using command-line arguments or a configuration file.
+G.hn-Manager is a comprehensive PowerShell-based tool designed to manage and interact with G.hn devices, such as the G4200-4C. It provides an intuitive interactive menu for managing connections, VLANs, endpoints, and performing other administrative tasks. The tool also supports non-interactive execution using command-line arguments or a configuration file for automation.
 
 ---
 
-## Features
+## Key Features
 
+### General
 - **Interactive Menu**: Navigate through various management options using an intuitive menu.
 - **Non-Interactive Mode**: Execute specific tasks directly via command-line arguments.
 - **Configuration File**: Predefine device details (host, username, password) in a `config.json` file for convenience.
-- **Dependency Management**: Automatically checks and installs required dependencies (e.g., `Posh-SSH` module).
 - **Logging**: Logs all actions and outputs to a log file for auditing and troubleshooting.
+
+### Device Management
 - **SSH Connection Management**: Establishes and manages SSH connections to G.hn devices.
-- **Endpoint Management**: Restart specific G.hn endpoints by MAC address.
 - **Device Reboot**: Restart the G4200-4C device with optional automatic confirmation.
-- **Binary Release**: A compiled `.exe` version is available for users who prefer not to run the PowerShell script directly.
+- **System Logs**: Fetch and display system logs from the G4200-4C device.
+
+### Endpoint Management
+- **Show Connected Endpoints**: Display a detailed list of connected G.hn endpoints, including:
+  - Interface
+  - Master ID
+  - Link status
+  - Local and remote MAC addresses
+  - Physical downstream/upstream speed
+  - Wire length
+  - Estimated throughput
+- **Restart Endpoint**: Restart a specific G.hn endpoint by its MAC address.
+
+### VLAN Management
+- **Show Configured VLANs**: Display all configured VLANs in a structured table format, including:
+  - VLAN ID
+  - Type
+  - Description
+  - Tagged, untagged, and forbidden ports
+- **Add VLAN**: Create a new VLAN with the following options:
+  - Validate VLAN ID (must be a number between 1 and 4094).
+  - Assign custom tagged, untagged, and forbidden ports.
+  - Use default port assignments if no custom ports are specified.
+- **Remove VLAN**: Remove an existing VLAN by specifying its VLAN ID. Includes confirmation to prevent accidental deletion.
+
+### Dependency Management
+- **Check Dependencies**: Automatically verifies if the required `Posh-SSH` module is installed. If not, prompts the user to install it.
+
+### Update Management
+- **Check for Updates**: Automatically checks for the latest version of the tool on GitHub.
 
 ---
 
 ## Prerequisites
 
-- **PowerShell**: Ensure PowerShell is installed on your system (required for the script version).
+- **PowerShell**: Ensure PowerShell 5.1 or later is installed on your system.
 - **Posh-SSH Module**: The script uses the `Posh-SSH` module for SSH connections. The script will install it automatically if not already installed.
 
 ---
@@ -42,6 +72,11 @@ G.hn-Manager is a PowerShell-based tool designed to manage and interact with G.h
 3. Ensure the script has execution permissions:
    ```powershell
    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+   ```
+
+4. Run the script:
+   ```powershell
+   .\Ghn-Manager.ps1
    ```
 
 ### 2. Using the Binary Release
@@ -99,7 +134,7 @@ Ghn-Manager.exe -RestartG42004C -Address 192.168.1.1 -Username admin -Password p
 The script and `.exe` use a `config.json` file to store default values for the host, username, and password. If the file does not exist, it will be created automatically with default values.
 
 #### Location:
-`C:\MATRIXNET\G.hn-Manager-1.0\config.json`
+`C:\MATRIXNET\G.hn-Manager-1.2\config.json`
 
 #### Example:
 ```json
@@ -114,40 +149,12 @@ If the configuration file is populated, the script or `.exe` will use these valu
 
 ---
 
-## Features in Detail
-
-### Interactive Menu Options
-
-1. **Check Dependencies**:
-   - Verifies if the `Posh-SSH` module is installed.
-   - Installs the module if missing.
-
-2. **Connect / Disconnect G4200-4C**:
-   - Establishes or terminates an SSH connection to the G4200-4C device.
-
-3. **Open Shell**:
-   - Opens an interactive shell session with the G.hn device.
-
-4. **Show Connected G.hn Endpoints**:
-   - Displays a list of connected G.hn endpoints.
-
-5. **Restart G.hn Endpoint**:
-   - Restarts a specific G.hn endpoint by its MAC address.
-
-6. **Restart G4200-4C**:
-   - Restarts the G4200-4C device with optional automatic confirmation.
-
-7. **Exit**:
-   - Closes the program and cleans up resources.
-
----
-
 ## Logging
 
 All actions and outputs are logged to a file for auditing and troubleshooting.
 
 - **Log File Location**:
-  `C:\MATRIXNET\G.hn-Manager-1.0\G.hn-Manager-1.0-<timestamp>.log`
+  `C:\MATRIXNET\G.hn-Manager-1.2\G.hn-Manager-1.2-<timestamp>.log`
 
 ---
 
@@ -167,7 +174,7 @@ All actions and outputs are logged to a file for auditing and troubleshooting.
 3. **Device Not Reachable**:
    - Verify the IP address or hostname of the device.
    - Check your network connection.
-   - Device is offline
+   - Ensure the device is powered on and accessible.
 
 ---
 
@@ -195,3 +202,4 @@ GitHub: [Vincent](https://github.com/your-profile)
 - Thanks to the developers of the `Posh-SSH` module for enabling extended SSH functionality in PowerShell.
 - Inspired by the need for efficient G.hn device management.
 
+---
