@@ -426,7 +426,7 @@ function CloseProgram {
 Write-Log "################ LOG BEGIN ################" "INFO"
 
 # Display the splash logo and program information
-if ($PSVersionTable.PSVersion.Major -ge 7) { SplashLogo }
+SplashLogo
 Write-Host "G.hn - Management Program for G4200-4C" -ForegroundColor Yellow
 Write-Host "MATRIXNET ~ Vincent" -ForegroundColor Yellow
 Write-Host "Version $version" -ForegroundColor Blue
