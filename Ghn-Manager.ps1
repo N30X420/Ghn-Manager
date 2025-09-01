@@ -11,9 +11,10 @@ param (
 $ErrorActionPreference = "Stop"
 
 # Define program metadata
-$version = "1.0"
+$version = "1.1"
 $ProgramName = "G.hn-Manager"
 $programdir = "C:\MATRIXNET\$ProgramName-$version"
+$GithubRepo = "https://github.com/N30X420/Ghn-Manager"
 $CurDate = Get-Date -Format "dd-MM-yyyy_HH-mm-ss"
 $global:LogFilePath = "$programdir\$ProgramName-$version-$CurDate.log"
 
@@ -75,8 +76,9 @@ function Logo {
     write-Host " | |_| |_| | | | | | | |_____| | |  | | (_| | | | | (_| | (_| |  __/ |" -ForegroundColor Blue
     write-Host "  \____(_)_| |_|_| |_|         |_|  |_|\__,_|_| |_|\__,_|\__, |\___|_|" -ForegroundColor Blue
     write-Host "                                                        |___/" -ForegroundColor Blue
-    write-Host "v$version" -ForegroundColor Blue
-    Write-Host "$ConnectionStatus" -ForegroundColor $ConnectionStatusColor
+    write-Host "v$version " -ForegroundColor Blue -NoNewline
+    Write-Host " $Script:NewVersionAvailable" -ForegroundColor Green
+    Write-Host "`n$ConnectionStatus" -ForegroundColor $ConnectionStatusColor
 }
 
 
@@ -94,7 +96,47 @@ function Write-Log {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Add-Content -Path $global:LogFilePath -Value "[$timestamp] [$Level] $Message"
 }
-
+function Format-Hyperlink {
+    param(
+      [Parameter(ValueFromPipeline = $true, Position = 0)]
+      [ValidateNotNullOrEmpty()]
+      [Uri] $Uri,
+  
+      [Parameter(Mandatory=$false, Position = 1)]
+      [string] $Label
+    )
+  
+    if (($PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows) -and -not $Env:WT_SESSION) {
+      # Fallback for Windows users not inside Windows Terminal
+      if ($Label) {
+        return "($Uri)"
+      }
+      return "$Uri"
+    }
+  
+    if ($Label) {
+      return "`e]8;;$Uri`e\$Label`e]8;;`e\"
+    }
+  
+    return "$Uri"
+}
+function CheckForUpdates {
+    try {
+        $Releases = Invoke-RestMethod -Uri "https://api.github.com/repos/N30X420/Ghn-Manager/releases"
+		$ReleaseInfo = ($Releases | Sort-Object id -desc)[0]
+		$LatestVersion = [version[]]$ReleaseInfo.Name.Trim('v')
+		if ($LatestVersion -gt $version){ $Script:NewVersionAvailable = "v$LatestVersion is available $(Format-Hyperlink -Uri "$GithubRepo" -Label "v$LatestVersion")"}
+        else {
+            Write-Host "You are running the latest version - " -ForegroundColor Green -NoNewline
+            Write-Host "v$version" -ForegroundColor Blue
+            Start-Sleep -Seconds 2}
+    }
+    catch {
+        Write-Log $_.Exception.Message "ERROR"
+        Write-Warning "Error while checking for updates"
+        Start-Sleep -Seconds 2
+    }
+}
 
 # Function to check and install required dependencies
 function CheckDependencies {
@@ -384,7 +426,7 @@ function CloseProgram {
 Write-Log "################ LOG BEGIN ################" "INFO"
 
 # Display the splash logo and program information
-SplashLogo
+if ($PSVersionTable.PSVersion.Major -ge 7) { SplashLogo }
 Write-Host "G.hn - Management Program for G4200-4C" -ForegroundColor Yellow
 Write-Host "MATRIXNET ~ Vincent" -ForegroundColor Yellow
 Write-Host "Version $version" -ForegroundColor Blue
@@ -392,6 +434,7 @@ Write-Host "`n----------------------------" -ForegroundColor Magenta
 Write-Host "| Always trust the process |" -ForegroundColor Magenta
 Write-Host "----------------------------" -ForegroundColor Magenta
 Start-Sleep -Seconds 3
+CheckForUpdates
 
 # Ensure the program directory exists
 if (-Not (Test-Path $programdir)) { New-Item -ItemType Directory -Path $programdir }
