@@ -465,6 +465,8 @@ function AddVlan {
     Start-Sleep -Seconds 1
     Write-Log "VLAN ID: $vlanId created successfully." "INFO"
     Write-Host "VLAN ID: $vlanId created successfully." -ForegroundColor Green
+    Write-Host "Press any key to continue..." -ForegroundColor Yellow
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 
 
 }
@@ -488,7 +490,7 @@ function RemoveVlan {
         }
     }
 
-    Write-Host "`nAre you sure you want to remove VLAN ID: $vlanId? (Y/N)" -ForegroundColor Yellow
+    Write-Host "`nAre you sure you want to remove VLAN ID: $vlanId ? (Y/N)" -ForegroundColor Yellow
     $confirmation = Read-Host "Type 'Y' to confirm"
     if ($confirmation -ne 'Y' -or $confirmation -ne 'y') {
         Write-Log "Remove VLAN cancelled by user." "INFO"
@@ -507,6 +509,8 @@ function RemoveVlan {
     Start-Sleep -Seconds 1
     Write-Log "VLAN ID: $vlanId removed successfully." "INFO"
     Write-Host "VLAN ID: $vlanId removed successfully." -ForegroundColor Green
+    Write-Host "Press any key to continue..." -ForegroundColor Yellow
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 }
 
 # Function to restart a specific G.hn endpoint by MAC address
