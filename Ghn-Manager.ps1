@@ -609,6 +609,7 @@ function RestartG42004C {
     Write-Host "Please wait for the device to come back online." -ForegroundColor Yellow
     Write-Host "This may take up to a minute." -ForegroundColor Yellow
     Write-Host "Waiting for G4200-4C to come back online" -ForegroundColor Yellow
+    Start-Sleep -Seconds 5
     while ((Test-Connection -ComputerName $Address -Count 1 -Quiet) -eq $false) {
         Write-Host "." -ForegroundColor Yellow -NoNewline
     }
