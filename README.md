@@ -1,6 +1,6 @@
 # G.hn-Manager
 
-G.hn-Manager is a comprehensive PowerShell-based tool designed to manage and interact with G.hn devices, such as the G4200-4C. It provides an intuitive interactive menu for managing connections, VLANs, endpoints, and performing other administrative tasks. The tool also supports non-interactive execution using command-line arguments or a configuration file for automation.
+G.hn-Manager is a comprehensive PowerShell-based tool designed to manage and interact with G.hn devices, such as the G4200-4C and G4206C. It provides an intuitive interactive menu for managing connections, VLANs, endpoints, and performing other administrative tasks. The tool also supports non-interactive execution using command-line arguments or a configuration file for automation.
 
 ---
 
@@ -14,8 +14,8 @@ G.hn-Manager is a comprehensive PowerShell-based tool designed to manage and int
 
 ### Device Management
 - **SSH Connection Management**: Establishes and manages SSH connections to G.hn devices.
-- **Device Reboot**: Restart the G4200-4C device with optional automatic confirmation.
-- **System Logs**: Fetch and display system logs from the G4200-4C device.
+- **Device Reboot**: Restart the G4200-4C or G4206C device with optional automatic confirmation.
+- **System Logs**: Fetch and display system logs from the G4200-4C or G4206C device.
 
 ### Endpoint Management
 - **Show Connected Endpoints**: Display a detailed list of connected G.hn endpoints, including:
@@ -61,7 +61,7 @@ G.hn-Manager is a comprehensive PowerShell-based tool designed to manage and int
 
 1. Clone or download the repository to your local machine:
    ```bash
-   git clone https://github.com/your-repo/Ghn-Manager.git
+   git clone https://github.com/N30X420/Ghn-Manager.git
    ```
 
 2. Navigate to the project directory:
@@ -81,7 +81,7 @@ G.hn-Manager is a comprehensive PowerShell-based tool designed to manage and int
 
 ### 2. Using the Binary Release
 
-1. Download the latest `.exe` release from the [Releases](https://github.com/your-repo/Ghn-Manager/releases) page.
+1. Download the latest `.exe` release from the [Releases](https://github.com/N30X420/Ghn-Manager/releases) page.
 
 2. Place the `.exe` file in your desired directory.
 
@@ -120,7 +120,7 @@ or
 Ghn-Manager.exe -RestartEndpoint -Mac 001e.6e04.147f -Address 192.168.1.1 -Username admin -Password password
 ```
 
-#### Restart the G4200-4C Device
+#### Restart the G4200-4C or G4206C Device
 ```powershell
 .\Ghn-Manager.ps1 -RestartG42004C -Address 192.168.1.1 -Username admin -Password password
 ```
@@ -134,14 +134,15 @@ Ghn-Manager.exe -RestartG42004C -Address 192.168.1.1 -Username admin -Password p
 The script and `.exe` use a `config.json` file to store default values for the host, username, and password. If the file does not exist, it will be created automatically with default values.
 
 #### Location:
-`C:\MATRIXNET\G.hn-Manager-1.2\config.json`
+`C:\MATRIXNET\G.hn-Manager\config.json`
 
 #### Example:
 ```json
 {
     "Address": "192.168.1.1",
     "Username": "admin",
-    "Password": "password"
+    "Password": "password",
+    "Model": "G4206C"
 }
 ```
 
@@ -154,7 +155,7 @@ If the configuration file is populated, the script or `.exe` will use these valu
 All actions and outputs are logged to a file for auditing and troubleshooting.
 
 - **Log File Location**:
-  `C:\MATRIXNET\G.hn-Manager-1.2\G.hn-Manager-1.2-<timestamp>.log`
+   `C:\MATRIXNET\G.hn-Manager\G.hn-Manager-<timestamp>.log`
 
 ---
 
@@ -193,7 +194,7 @@ This project is licensed under the MIT License. See the `LICENSE` file for detai
 ## Author
 
 **Vincent**  
-GitHub: [Vincent](https://github.com/your-profile)
+GitHub: (https://github.com/N30X420)
 
 ---
 
