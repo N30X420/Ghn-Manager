@@ -48,12 +48,17 @@ $SupportedModels = @{
 
 $DeviceModel = $config.Model
 $ConfigModelValid = -not [string]::IsNullOrWhiteSpace($config.Model) -and $SupportedModels.ContainsKey($config.Model)
-if (-not $SupportedModels.ContainsKey($DeviceModel)) {
-    $DeviceModel = "G4200-4C"
-}
 
-$DefaultPorts = $SupportedModels[$DeviceModel].DefaultPorts
-$CustomPortHint = $SupportedModels[$DeviceModel].CustomPortHint
+$global:DeviceModel = $DeviceModel
+if ($ConfigModelValid) {
+    $DefaultPorts = $SupportedModels[$DeviceModel].DefaultPorts
+    $CustomPortHint = $SupportedModels[$DeviceModel].CustomPortHint
+    $global:DefaultPorts = $DefaultPorts
+    $global:CustomPortHint = $CustomPortHint
+} else {
+    $DefaultPorts = ""
+    $CustomPortHint = ""
+}
 
 function Select-DeviceModel {
     param(
@@ -75,7 +80,7 @@ function Select-DeviceModel {
     Write-Host " "
 
     $xmin = 2
-    $ymin = 15
+    $ymin = 16
     [Console]::SetCursorPosition(0, $ymin)
     foreach ($option in $options) {
         for ($i = 0; $i -lt $xmin; $i++) {
@@ -123,10 +128,13 @@ function Select-DeviceModel {
                     if ($AllowSkip) {
                         $modelIndex = $cursorY - 1
                     }
-                    $script:DeviceModel = $modelKeys[$modelIndex]
-                    $script:DefaultPorts = $SupportedModels[$script:DeviceModel].DefaultPorts
-                    $script:CustomPortHint = $SupportedModels[$script:DeviceModel].CustomPortHint
-                    Write-Host "`nDevice model set to $script:DeviceModel for this session." -ForegroundColor Green
+                    $global:DeviceModel = $modelKeys[$modelIndex]
+                    $global:DefaultPorts = $SupportedModels[$global:DeviceModel].DefaultPorts
+                    $global:CustomPortHint = $SupportedModels[$global:DeviceModel].CustomPortHint
+                    $script:DeviceModel = $global:DeviceModel
+                    $script:DefaultPorts = $global:DefaultPorts
+                    $script:CustomPortHint = $global:CustomPortHint
+                    Write-Host "`nDevice model set to $global:DeviceModel for this session." -ForegroundColor Green
                     Start-Sleep -Seconds 1
                     return
                 }
@@ -181,7 +189,9 @@ function Logo {
     write-Host "                                                        |___/" -ForegroundColor Blue
     write-Host "v$version " -ForegroundColor Blue -NoNewline
     Write-Host " $Script:NewVersionAvailable" -ForegroundColor Green
-    Write-Host "`n$ConnectionStatus" -ForegroundColor $ConnectionStatusColor
+    Write-Host "`nModel: $DeviceModel" -ForegroundColor Cyan
+    Write-Host "$ConnectionStatus" -ForegroundColor $ConnectionStatusColor
+    
 }
 
 
@@ -496,20 +506,60 @@ function AddVlan {
     Write-Host "`nAdding new VLAN" -ForegroundColor Yellow
     Write-Warning "BE SURE TO NOT USE AN EXISTING VLAN ID, THIS WILL OVERWRITE THE EXISTING VLAN!"
 
-    # Validate VLAN ID
-    while ($true) {
-        $vlanId = Read-Host "Enter VLAN ID (1-4094)"
-        if ($vlanId -match '^\d+$' -and [int]$vlanId -ge 1 -and [int]$vlanId -le 4094) {
-            break
-        } else {
-            Write-Host "Invalid VLAN ID. Please enter a number between 1 and 4094." -ForegroundColor Red
-        }
+    if (-not $SupportedModels.ContainsKey($DeviceModel)) {
+        Write-Host "Device model is not set. Please select a model to load default ports." -ForegroundColor Yellow
+        Select-DeviceModel
+        $DeviceModel = $global:DeviceModel
+        $DefaultPorts = $global:DefaultPorts
+        $CustomPortHint = $global:CustomPortHint
     }
 
-    $vlanDescription = Read-Host "Enter VLAN Name/Description"
+    # Validate VLAN IDs
+    while ($true) {
+        $vlanIdInput = Read-Host "Enter VLAN ID(s) (1-4094, comma-separated, ranges allowed like 10-30)"
+        $tokens = @($vlanIdInput -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        $vlanIds = @()
+        $invalidTokens = @()
+        foreach ($token in $tokens) {
+            if ($token -match '^\d+$') {
+                $id = [int]$token
+                if ($id -ge 1 -and $id -le 4094) {
+                    $vlanIds += $id
+                } else {
+                    $invalidTokens += $token
+                }
+                continue
+            }
+            if ($token -match '^(\d+)\s*-\s*(\d+)$') {
+                $startId = [int]$matches[1]
+                $endId = [int]$matches[2]
+                if ($startId -lt 1 -or $endId -gt 4094 -or $startId -gt $endId) {
+                    $invalidTokens += $token
+                    continue
+                }
+                for ($i = $startId; $i -le $endId; $i++) {
+                    $vlanIds += $i
+                }
+                continue
+            }
+            $invalidTokens += $token
+        }
+        if ($vlanIds.Count -eq 0) {
+            Write-Host "Invalid VLAN ID. Please enter a number between 1 and 4094." -ForegroundColor Red
+            continue
+        }
+        if ($invalidTokens.Count -gt 0) {
+            Write-Host "Invalid VLAN ID(s): $($invalidTokens -join ', '). Please enter numbers between 1 and 4094." -ForegroundColor Red
+            continue
+        }
+        break
+    }
     Write-Host "`nWould you like to use custom port assignments? (Y/N)" -ForegroundColor Yellow
     Write-Host "If no the default ports will be assigned. ($DefaultPorts)" -ForegroundColor Yellow
-    $customPorts = Read-Host "Use custom ports"
+    $customPorts = Read-Host "Use custom ports (default: N)"
+    if ([string]::IsNullOrWhiteSpace($customPorts)) {
+        $customPorts = "N"
+    }
     if ($customPorts -eq "Y" -or $customPorts -eq "y") {
         $taggedPorts = Read-Host "Enter Tagged Ports (comma-separated, e.g., $CustomPortHint,Monitor)"
         $untaggedPorts = Read-Host "Enter Untagged Ports (comma-separated, e.g., $CustomPortHint,Monitor)"
@@ -520,53 +570,56 @@ function AddVlan {
         $untaggedPorts = ""
         $forbiddenPorts = ""
     }
-    Write-Log "Creating VLAN ID: $vlanId, Description: $vlanDescription" "INFO"
-    $stream.WriteLine("configure terminal")
-    Start-Sleep -Seconds 2
-    $stream.WriteLine("vlan $vlanId")
-    Start-Sleep -Seconds 2
-    $stream.WriteLine("name `"$vlanDescription`"")
-    Start-Sleep -Seconds 2
-    if ($taggedPorts) {
-        $taggedPortsArray = $taggedPorts -split ","
-        foreach ($port in $taggedPortsArray) {
-            $port = $port.Trim()
-            if ($port) {
-                Write-Log "Adding Tagged Port: $port to VLAN ID: $vlanId" "INFO"
-                Write-Host "Adding Tagged Port: $port to VLAN ID: $vlanId" -ForegroundColor Yellow
-                $stream.WriteLine("switchport tagged ethernet $port")
-                Start-Sleep -Seconds 1
+    foreach ($vlanId in $vlanIds) {
+        $vlanDescription = Read-Host "Enter VLAN Name/Description for VLAN $vlanId"
+        Write-Log "Creating VLAN ID: $vlanId, Description: $vlanDescription" "INFO"
+        $stream.WriteLine("configure terminal")
+        Start-Sleep -Seconds 2
+        $stream.WriteLine("vlan $vlanId")
+        Start-Sleep -Seconds 2
+        $stream.WriteLine("name `"$vlanDescription`"")
+        Start-Sleep -Seconds 2
+        if ($taggedPorts) {
+            $taggedPortsArray = $taggedPorts -split ","
+            foreach ($port in $taggedPortsArray) {
+                $port = $port.Trim()
+                if ($port) {
+                    Write-Log "Adding Tagged Port: $port to VLAN ID: $vlanId" "INFO"
+                    Write-Host "Adding Tagged Port: $port to VLAN ID: $vlanId" -ForegroundColor Yellow
+                    $stream.WriteLine("switchport tagged ethernet $port")
+                    Start-Sleep -Seconds 1
+                }
             }
         }
-    }
-    if ($untaggedPorts) {
-        $untaggedPortsArray = $untaggedPorts -split ","
-        foreach ($port in $untaggedPortsArray) {
-            $port = $port.Trim()
-            if ($port) {
-                Write-Log "Adding Untagged Port: $port to VLAN ID: $vlanId" "INFO"
-                Write-Host "Adding Untagged Port: $port to VLAN ID: $vlanId" -ForegroundColor Yellow
-                $stream.WriteLine("switchport untagged ethernet $port")
-                Start-Sleep -Seconds 1
+        if ($untaggedPorts) {
+            $untaggedPortsArray = $untaggedPorts -split ","
+            foreach ($port in $untaggedPortsArray) {
+                $port = $port.Trim()
+                if ($port) {
+                    Write-Log "Adding Untagged Port: $port to VLAN ID: $vlanId" "INFO"
+                    Write-Host "Adding Untagged Port: $port to VLAN ID: $vlanId" -ForegroundColor Yellow
+                    $stream.WriteLine("switchport untagged ethernet $port")
+                    Start-Sleep -Seconds 1
+                }
             }
         }
-    }
-    if ($forbiddenPorts) {
-        $forbiddenPortsArray = $forbiddenPorts -split ","
-        foreach ($port in $forbiddenPortsArray) {
-            $port = $port.Trim()
-            if ($port) {
-                Write-Log "Adding Forbidden Port: $port to VLAN ID: $vlanId" "INFO"
-                Write-Host "Adding Forbidden Port: $port to VLAN ID: $vlanId" -ForegroundColor Yellow
-                $stream.WriteLine("switchport forbidden ethernet $port")
-                Start-Sleep -Seconds 1
+        if ($forbiddenPorts) {
+            $forbiddenPortsArray = $forbiddenPorts -split ","
+            foreach ($port in $forbiddenPortsArray) {
+                $port = $port.Trim()
+                if ($port) {
+                    Write-Log "Adding Forbidden Port: $port to VLAN ID: $vlanId" "INFO"
+                    Write-Host "Adding Forbidden Port: $port to VLAN ID: $vlanId" -ForegroundColor Yellow
+                    $stream.WriteLine("switchport forbidden ethernet $port")
+                    Start-Sleep -Seconds 1
+                }
             }
         }
+        $stream.WriteLine("exit")
+        Start-Sleep -Seconds 1
+        Write-Log "VLAN ID: $vlanId created successfully." "INFO"
+        Write-Host "VLAN ID: $vlanId created successfully." -ForegroundColor Green
     }
-    $stream.WriteLine("exit")
-    Start-Sleep -Seconds 1
-    Write-Log "VLAN ID: $vlanId created successfully." "INFO"
-    Write-Host "VLAN ID: $vlanId created successfully." -ForegroundColor Green
     Write-Host "Press any key to continue..." -ForegroundColor Yellow
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 
